@@ -78,8 +78,8 @@ export default function CGPAPage() {
       setData(r.data);
       if (r.data.results?.length > 0) setSelectedSem(r.data.results[0].semId);
       
-      // Check if user has seen info
-      if (!localStorage.getItem('cgpaInfoSeen')) {
+      // Check if user has seen info this session
+      if (!sessionStorage.getItem('cgpaInfoSeen')) {
         setShowOverlay(true);
       }
     } catch (e: unknown) {
@@ -107,7 +107,7 @@ export default function CGPAPage() {
   }
 
   function closeOverlay() {
-    localStorage.setItem('cgpaInfoSeen', 'true');
+    sessionStorage.setItem('cgpaInfoSeen', 'true');
     setShowOverlay(false);
   }
 

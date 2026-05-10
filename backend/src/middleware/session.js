@@ -36,7 +36,7 @@ async function buildSessionMiddleware() {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 2 * 60 * 60 * 1000, // 2 hours
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
   });
 }
