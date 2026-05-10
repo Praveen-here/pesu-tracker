@@ -2,6 +2,13 @@ const cheerio = require('cheerio');
 
 /**
  * Parse ISA/ESA results HTML for a semester.
+ *
+ * PESU HTML quirks handled:
+ *   - Each ISA 1, ISA 2, Assignment entry appears TWICE (duplicate divs)
+ *   - 0-credit subjects (e.g. Personality Development) only have FINAL ISA + ESA grade
+ *   - In-progress semesters have no SGPA/CGPA info bar, no credits column
+ *   - FINAL ISA of "0" when semester is in-progress means "not yet calculated"
+ *   - ESA "NA" means not yet taken
  */
 function parseResultsHTML(html) {
   const $ = cheerio.load(html);
@@ -54,17 +61,43 @@ function parseResultsHTML(html) {
     const courseNameRaw = headerH6.clone().children('.lbl-title-light').remove().end().text();
     const courseName = courseNameRaw.replace(/\s+/g, ' ').trim();
 
-    const creditsText = $(block).find('h6.text-right, .text-right h6').first().text();
-    const creditsMatch = creditsText.match(/([\d.]+)\s*\/\s*([\d.]+)/);
-    const credits = creditsMatch ? { earned: parseFloat(creditsMatch[1]), total: parseFloat(creditsMatch[2]) } : null;
+    // Parse credits — format: <span class="f-size-semi-big">5</span> / 5
+    const creditsH6 = $(block).find('h6.text-right').first();
+    let credits = null;
+    if (creditsH6.length) {
+      const earnedText = creditsH6.find('.f-size-semi-big').text().trim();
+      const fullText = creditsH6.text().trim();
+      const slashMatch = fullText.match(/([\d.]+)\s*\/\s*([\d.]+)/);
+      if (slashMatch) {
+        credits = { earned: parseFloat(slashMatch[1]), total: parseFloat(slashMatch[2]) };
+      } else if (earnedText) {
+        const earned = parseFloat(earnedText);
+        credits = { earned, total: earned };
+      }
+    }
 
+    const isZeroCredit = credits && credits.total === 0;
+
+    // Parse marks from dashboard-info-bar divs
+    // IMPORTANT: PESU duplicates ISA 1, ISA 2, Assignment entries.
+    // We use a Set to only take the first occurrence of each label.
     const marks = {};
     const seenLabels = new Set();
 
     $(block).find('.dashboard-info-bar > div').each((_, div) => {
-      const label = $(div).find('h6').first().text().trim();
+      // The h6 can be directly in the div, or nested inside an inner div (for ESA)
+      let label = $(div).find('> h6').first().text().trim();
+
+      // ESA is often inside a nested div: <div><div><h6>ESA</h6>...</div></div>
+      if (!label) {
+        const innerH6 = $(div).find('div > h6').first().text().trim();
+        if (innerH6) label = innerH6;
+      }
+
       if (!label) return;
-      if (seenLabels.has(label) && (label === 'ISA 1' || label === 'ISA 2' || label === 'Assignment')) return;
+
+      // Skip duplicates
+      if (seenLabels.has(label)) return;
       seenLabels.add(label);
 
       const scoreEl = $(div).find('.dark-text.f-size-semi-big, .f-size-semi-big, .f-size-2x-big').first();
@@ -72,16 +105,38 @@ function parseResultsHTML(html) {
       const divText = $(div).text();
       const maxMatch = divText.match(/\/([\d.]+)/);
       const max = maxMatch ? parseFloat(maxMatch[1]) : null;
-      const score = (!scoreText || scoreText === 'NA') ? null : (parseFloat(scoreText) || scoreText);
 
-      if (label === 'ISA 1')     marks.isa1       = { score: typeof score === 'number' ? score : null, max: max || 40 };
-      else if (label === 'ISA 2')     marks.isa2       = { score: typeof score === 'number' ? score : null, max: max || 40 };
-      else if (label === 'Assignment') marks.assignment = { score: typeof score === 'number' ? score : null, max: max || 10 };
-      else if (label === 'FINAL ISA') marks.finalIsa   = { score: typeof score === 'number' ? score : null };
-      else if (label === 'ESA' || label === 'NA') marks.esa = (typeof score === 'string' && score !== 'NA') ? score : (typeof score === 'number' ? String(score) : null);
+      // Parse score: numeric or string (grade letter like A, B, C, AP, etc.)
+      let score;
+      if (!scoreText || scoreText === 'NA') {
+        score = null;
+      } else {
+        const numScore = parseFloat(scoreText);
+        score = isNaN(numScore) ? scoreText : numScore;
+      }
+
+      if (label === 'ISA 1') {
+        marks.isa1 = { score: typeof score === 'number' ? score : null, max: max || 40 };
+      } else if (label === 'ISA 2') {
+        marks.isa2 = { score: typeof score === 'number' ? score : null, max: max || 40 };
+      } else if (label === 'Assignment') {
+        marks.assignment = { score: typeof score === 'number' ? score : null, max: max || 10 };
+      } else if (label === 'FINAL ISA') {
+        const finalScore = typeof score === 'number' ? score : null;
+        // PESU shows FINAL ISA = 0 as placeholder when semester is in-progress
+        // Only trust it if the semester is completed OR if it's > 0
+        marks.finalIsa = { score: (finalScore === 0 && !result.isCompleted) ? null : finalScore };
+      } else if (label === 'ESA') {
+        // ESA is a grade letter (A, B, C, P, F, AP, etc.) or null
+        if (typeof score === 'string' && score !== 'NA') {
+          marks.esa = score;
+        } else {
+          marks.esa = null;
+        }
+      }
     });
 
-    result.subjects.push({ courseCode, courseName, credits, marks });
+    result.subjects.push({ courseCode, courseName, credits, marks, isZeroCredit: !!isZeroCredit });
   });
 
   return result;
@@ -108,15 +163,25 @@ const TARGET_TOTAL     = Math.ceil(TOTAL_MAX * 0.70); // 105 = Grade B = CGPA �
  * ONLY assumption made: Assignment = 8.5/10 (if not yet released by teacher).
  * Everything else is pure math — no guessing.
  *
- * ISA1 done, ISA2 pending:
- *   → Two unknowns (ISA2 + ESA). Cannot solve without fixing one.
- *   → So we return a RANGE: for every possible ISA2 score (40,35,30...0),
- *     we compute the exact ESA you'd need. Student picks their row.
- *
- * ISA1 + ISA2 done, ESA pending:
- *   → One unknown. Exact answer. No assumptions needed.
+ * Skips 0-credit subjects entirely (they have no ISA/ESA marks, just a pass/fail grade).
  */
 function computeMinMarks(subject) {
+  // Skip 0-credit subjects — they don't factor into CGPA
+  if (subject.isZeroCredit) {
+    return {
+      state: 'zero_credit',
+      currentIsa1: null,
+      currentIsa2: null,
+      assignment: null,
+      finalIsa: null,
+      minEsa: null,
+      scenarios: null,
+      impossible: false,
+      alreadySecured: false,
+      targets: {},
+    };
+  }
+
   const { marks } = subject;
   const isa1             = marks.isa1?.score ?? null;
   const isa2             = marks.isa2?.score ?? null;
@@ -192,6 +257,8 @@ function computeMinMarks(subject) {
 function projectSGPA(subjects, creditDefault = 4) {
   let weightedSum = 0, totalCredits = 0;
   for (const sub of subjects) {
+    // Skip 0-credit subjects
+    if (sub.isZeroCredit) continue;
     const credits = sub.credits?.total ?? creditDefault;
     const a = computeMinMarks(sub);
     if (a.finalIsa !== null) {

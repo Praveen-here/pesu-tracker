@@ -17,7 +17,7 @@ interface Scenario {
 }
 
 interface Analysis {
-  state: 'none' | 'isa1_done' | 'isa2_done' | 'complete';
+  state: 'none' | 'isa1_done' | 'isa2_done' | 'complete' | 'zero_credit';
   currentIsa1: number | null;
   currentIsa2: number | null;
   finalIsa: number | null;
@@ -31,6 +31,7 @@ interface Subject {
   courseCode: string;
   courseName: string;
   credits: { earned: number; total: number } | null;
+  isZeroCredit?: boolean;
   marks: {
     isa1?: { score: number | null; max: number };
     isa2?: { score: number | null; max: number };
@@ -267,10 +268,18 @@ function CompletedView({ sem }: { sem: SemResult }) {
           className="glass-card" style={{ padding: '1.2rem 1.5rem' }}>
           <SubjectHead sub={sub} />
           <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-            {sub.marks.isa1     && <Chip label="ISA 1"     val={`${sub.marks.isa1.score ?? '—'}/40`} />}
-            {sub.marks.isa2     && <Chip label="ISA 2"     val={`${sub.marks.isa2.score ?? '—'}/40`} />}
-            {sub.marks.finalIsa && <Chip label="Final ISA" val={`${sub.marks.finalIsa.score ?? '—'}/50`} />}
-            {sub.marks.esa      && <Chip label="ESA Grade" val={`${sub.marks.esa}`} highlight />}
+            {sub.isZeroCredit ? (
+              // 0-credit subjects: only show ESA grade
+              sub.marks.esa && <Chip label="Grade" val={sub.marks.esa} highlight />
+            ) : (
+              <>
+                {sub.marks.isa1     && <Chip label="ISA 1"     val={`${sub.marks.isa1.score ?? '—'}/40`} />}
+                {sub.marks.isa2     && <Chip label="ISA 2"     val={`${sub.marks.isa2.score ?? '—'}/40`} />}
+                {sub.marks.assignment && <Chip label="Assignment" val={`${sub.marks.assignment.score ?? '—'}/10`} />}
+                {sub.marks.finalIsa && <Chip label="Final ISA" val={`${sub.marks.finalIsa.score ?? '—'}/50`} />}
+                {sub.marks.esa      && <Chip label="ESA Grade" val={sub.marks.esa} highlight />}
+              </>
+            )}
           </div>
         </motion.div>
       ))}
@@ -296,8 +305,19 @@ function InProgressView({ sem }: { sem: SemResult }) {
               <StatusPill a={a} />
             </div>
 
+            {/* 0-credit subject: just show grade */}
+            {a.state === 'zero_credit' && (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                {sub.marks.esa ? (
+                  <>Grade: <strong style={{ color: '#ffffff' }}>{sub.marks.esa}</strong></>
+                ) : (
+                  'No credit subject — grade only, not included in CGPA calculation.'
+                )}
+              </p>
+            )}
+
             {/* ISA 1 score done */}
-            {a.currentIsa1 !== null && (
+            {a.state !== 'zero_credit' && a.currentIsa1 !== null && (
               <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
                 <Chip label="ISA 1 (done)" val={`${a.currentIsa1}/40`} highlight />
                 {a.currentIsa2 !== null && <Chip label="ISA 2 (done)" val={`${a.currentIsa2}/40`} highlight />}
@@ -457,6 +477,7 @@ function ScoreCard({ label, value, sub, color }: { label: string; value: string;
 }
 
 function StatusPill({ a }: { a: Analysis }) {
+  if (a.state === 'zero_credit') return <Pill label="No Credit" color="var(--text-muted)" bg="#18181b" />;
   if (a.impossible)      return <Pill label="Very tough" color="var(--danger)" bg="var(--danger-dim)" />;
   if (a.alreadySecured)  return <Pill label="On track" color="var(--safe)" bg="var(--safe-dim)" />;
   if (a.state === 'complete')   return <Pill label="Done" color="var(--safe)" bg="var(--safe-dim)" />;
@@ -474,6 +495,7 @@ function Pill({ label, color, bg }: { label: string; color: string; bg: string }
 }
 
 function borderColor(a: Analysis) {
+  if (a.state === 'zero_credit') return '#27272a';
   if (a.impossible)     return 'var(--danger)';
   if (a.alreadySecured) return 'var(--safe)';
   if (a.state === 'isa2_done' || a.state === 'isa1_done') return '#ffffff';
