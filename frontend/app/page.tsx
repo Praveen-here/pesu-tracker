@@ -104,7 +104,7 @@ export default function LoginPage() {
               id="srn-input"
               className="pesu-input"
               type="text"
-              placeholder="e.g. PES1UG22CS001"
+              placeholder="e.g. PES1PG25CA317"
               value={srn}
               onChange={(e) => setSrn(e.target.value)}
               autoComplete="username"
