@@ -12,6 +12,9 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
+  // Trust proxy is required when hosting behind Render/Railway proxy to set secure cookies
+  app.set('trust proxy', 1);
+
   // Security headers
   app.use(helmet());
 
