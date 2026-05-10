@@ -1,0 +1,15 @@
+{
+  "name": "pesu-attendance-tracker",
+  "version": "1.0.0",
+  "description": "Run both backend and frontend together",
+  "scripts": {
+    "predev": "npx kill-port 5000 3000 --silent 2>nul & exit 0",
+    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"cyan,magenta\" \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "backend": "npm run dev --prefix backend",
+    "frontend": "npm run dev --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "kill-port": "^2.0.1"
+  }
+}
