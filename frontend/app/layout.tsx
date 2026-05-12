@@ -3,7 +3,7 @@ import { Analytics } from '@vercel/analytics/react';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'PESU Attendance Tracker',
+  title: 'PESU Tracker',
   description: 'Track your PESU Academy attendance with smart analytics — bunk calculator, recovery guide, and subject-wise breakdown.',
   keywords: 'PESU, attendance, tracker, PES University, bunk calculator',
 };

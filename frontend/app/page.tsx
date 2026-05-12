@@ -207,7 +207,7 @@ export default function LoginPage() {
             lineHeight: 1.6,
           }}
         >
-          Your credentials are never stored. They are used only to fetch your attendance from PESU Academy and are discarded immediately.
+          Your credentials are never stored. They are used only to fetch your attendance and marks from PESU Academy and are discarded immediately.
         </p>
       </motion.div>
 
