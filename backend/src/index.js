@@ -12,6 +12,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
+  // ── Ultra-lightweight keep-alive endpoint ──
+  // Placed BEFORE all middleware (helmet, cors, sessions, body parsers)
+  // so it has zero overhead and responds instantly.
+  // Point your uptime monitor (Better Stack / UptimeRobot) here.
+  app.get('/ping', (_, res) => {
+    res.status(200).send('alive');
+  });
+
   // Trust proxy is required when hosting behind Render/Railway proxy to set secure cookies
   app.set('trust proxy', 1);
 
