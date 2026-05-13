@@ -136,7 +136,13 @@ function parseResultsHTML(html) {
       }
     });
 
-    result.subjects.push({ courseCode, courseName, credits, marks, isZeroCredit: !!isZeroCredit });
+    // Extract subjectId from graph JavaScript links
+    // Pattern: showISAResultGraph('21281','32.5','40.0','3064','1')
+    const blockHtml = $(block).html() || '';
+    const graphMatch = blockHtml.match(/showISAResultGraph\('(\d+)'/);
+    const subjectId = graphMatch ? graphMatch[1] : null;
+
+    result.subjects.push({ courseCode, courseName, credits, marks, isZeroCredit: !!isZeroCredit, subjectId });
   });
 
   return result;

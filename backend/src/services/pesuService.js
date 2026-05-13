@@ -261,4 +261,83 @@ async function fetchAllResults(serializedJar, csrf, finalUrl) {
   return { sems, allResults };
 }
 
-module.exports = { fullLogin, refreshAttendance, fetchAllResults };
+/**
+ * Fetch ISA/Assignment graph distribution data for a single subject+assessment.
+ * actionType=58, menuId=652
+ *
+ * @param {object}  serializedJar  - cookie jar
+ * @param {string}  csrf           - CSRF token
+ * @param {string}  finalUrl       - referer URL
+ * @param {object}  params         - { subjectId, marks, totalMarks, batchClassId, isaMarksMasterId }
+ * @returns {{ seriesArray, myScoreRange, drilldownSeries } | null}
+ */
+async function fetchISAGraph(serializedJar, csrf, finalUrl, params) {
+  const jar = CookieJar.fromJSON(JSON.stringify(serializedJar));
+  const { client } = createClient();
+  client.defaults.jar = jar;
+
+  const h = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    Referer: finalUrl || `${PESU_BASE}/s/studentProfilePESU`,
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-CSRF-TOKEN': csrf,
+  };
+
+  const body = new URLSearchParams({
+    url: 'studentProfilePESUAdmin',
+    _csrf: csrf,
+    controllerMode: '6402',
+    actionType: '58',
+    subjectId: params.subjectId,
+    Isamarks: String(params.marks),
+    Totalmarks: String(params.totalMarks),
+    BatchClassId: params.batchClassId,
+    IsaMarkMasterId: String(params.isaMarksMasterId), // NOTE: no 's' — matches PESU JS exactly
+    menuId: params.menuId || '652',
+  }).toString();
+
+  try {
+    const res = await client.post(`${PESU_BASE}/s/studentProfilePESUAdmin`, body, {
+      headers: h,
+      validateStatus: (s) => s < 500,
+    });
+
+    const html = typeof res.data === 'string' ? res.data : '';
+    return parseGraphHTML(html, params.marks);
+  } catch (err) {
+    console.error(`[Graph] Error fetching graph for subject ${params.subjectId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Parse the graph HTML response to extract distribution data.
+ * Extracts `seriesArray` and `myScoreRange` from embedded <script> tags.
+ */
+function parseGraphHTML(html, studentMarks) {
+  // Extract seriesArray: var seriesArray = [{...}, ...];
+  const seriesMatch = html.match(/var\s+seriesArray\s*=\s*(\[.*?\]);/s);
+  if (!seriesMatch) return null;
+
+  // Extract myScoreRange: var myScoreRange = [{...}];
+  const scoreMatch = html.match(/var\s+myScoreRange\s*=\s*(\[.*?\]);/s);
+
+  try {
+    // Parse the JS array by replacing single quotes with double quotes
+    const seriesRaw = seriesMatch[1].replace(/'/g, '"');
+    const seriesArray = JSON.parse(seriesRaw);
+
+    let myScoreRange = null;
+    if (scoreMatch) {
+      const scoreRaw = scoreMatch[1].replace(/'/g, '"');
+      myScoreRange = JSON.parse(scoreRaw);
+    }
+
+    return { seriesArray, myScoreRange, studentMarks };
+  } catch (err) {
+    console.error('[Graph] Failed to parse graph data:', err.message);
+    return null;
+  }
+}
+
+module.exports = { fullLogin, refreshAttendance, fetchAllResults, fetchISAGraph };

@@ -35,3 +35,8 @@ export async function refreshResults() {
   const res = await api.post('/api/results/refresh');
   return res.data;
 }
+
+export async function getPercentile() {
+  const res = await api.get('/api/results/percentile');
+  return res;
+}

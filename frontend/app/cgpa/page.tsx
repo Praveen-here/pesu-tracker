@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { Home, ArrowLeft, CheckCircle2, AlertCircle, RefreshCw, LogOut, X } from 'lucide-react';
-import { logout, refreshResults } from '@/lib/api';
+import { Home, ArrowLeft, CheckCircle2, AlertCircle, RefreshCw, LogOut, X, TrendingUp } from 'lucide-react';
+import { logout, refreshResults, getPercentile } from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Scenario {
@@ -61,6 +61,25 @@ interface ResultsData {
   sems: { id: string; label: string }[];
 }
 
+interface SubjectPercentile {
+  courseCode: string;
+  courseName: string;
+  credits: number;
+  percentile: number;
+  totalStudents: number;
+  assessments: { type: string; percentile: number; marks: number; maxMarks: number }[];
+}
+
+interface PercentileData {
+  semLabel: string;
+  overallPercentile: number;
+  topPercentage: number;
+  standing: string;
+  comparisonText: string;
+  subjectCount: number;
+  subjects: SubjectPercentile[];
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function CGPAPage() {
   const router = useRouter();
@@ -70,6 +89,8 @@ export default function CGPAPage() {
   const [error, setError] = useState('');
   const [selectedSem, setSelectedSem] = useState('');
   const [showOverlay, setShowOverlay] = useState(false);
+  const [percentile, setPercentile] = useState<PercentileData | null>(null);
+  const [percentileLoading, setPercentileLoading] = useState(false);
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
@@ -92,6 +113,16 @@ export default function CGPAPage() {
   }, [router]);
 
   useEffect(() => { fetchResults(); }, [fetchResults]);
+
+  // Fetch percentile after results are loaded
+  useEffect(() => {
+    if (!data) return;
+    setPercentileLoading(true);
+    getPercentile()
+      .then(r => { if (r.data?.overallPercentile != null) setPercentile(r.data); })
+      .catch(() => { /* silently fail — percentile is optional */ })
+      .finally(() => setPercentileLoading(false));
+  }, [data]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -209,7 +240,7 @@ export default function CGPAPage() {
         </div>
       </motion.header>
 
-      {/* ── CGPA Summary ── */}
+      {/* ── CGPA + Percentile Summary ── */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
         style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.75rem' }}>
         {data.cgpa !== null && (
@@ -217,10 +248,7 @@ export default function CGPAPage() {
             sub={data.cgpa >= 8 ? 'Placement ready' : 'Below 8.0'}
             color={data.cgpa >= 8 ? 'var(--safe)' : 'var(--warn)'} />
         )}
-        {completedSems.map(s => (
-          <ScoreCard key={s.semId} label={s.semLabel} value={`SGPA ${s.sgpa?.toFixed(2)}`}
-            sub="Completed" color="#ffffff" />
-        ))}
+        <PercentileCard data={percentile} loading={percentileLoading} />
       </motion.div>
 
       {/* ── Sem Tabs ── */}
@@ -472,6 +500,164 @@ function ScoreCard({ label, value, sub, color }: { label: string; value: string;
       <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '0.3rem' }}>{label.toUpperCase()}</p>
       <p style={{ fontWeight: 700, fontSize: '1.8rem', color, lineHeight: 1 }}>{value}</p>
       <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>{sub}</p>
+    </motion.div>
+  );
+}
+
+// ─── Percentile Card ──────────────────────────────────────────────────────────
+function PercentileCard({ data, loading }: { data: PercentileData | null; loading: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (loading) {
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+        className="glass-card" style={{ padding: '1.2rem 1.5rem', flex: '1 1 200px', minWidth: '200px', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ width: 56, height: 56, borderRadius: '50%', border: '3px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <RefreshCw className="w-4 h-4 animate-spin" style={{ color: 'var(--text-muted)' }} />
+        </div>
+        <div>
+          <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.06em' }}>COMPUTING RANK</p>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>Analyzing class data...</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+        className="glass-card" style={{ padding: '1rem 1.4rem', flex: '1 1 200px', minWidth: '200px' }}>
+        <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '0.3rem' }}>CLASS STANDING</p>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Not enough data yet</p>
+      </motion.div>
+    );
+  }
+
+  const pct = data.overallPercentile;
+  const glowColor = pct >= 80 ? '#22c55e' : pct >= 60 ? '#3b82f6' : pct >= 40 ? '#eab308' : '#ef4444';
+  const circumference = 2 * Math.PI * 24; // r=24
+  const dashOffset = circumference - (circumference * pct) / 100;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="glass-card"
+      style={{
+        padding: '1.2rem 1.5rem',
+        flex: '2 1 280px',
+        minWidth: '280px',
+        cursor: 'pointer',
+        position: 'relative',
+        overflow: 'hidden',
+        borderColor: `${glowColor}22`,
+      }}
+      onClick={() => setExpanded(!expanded)}
+    >
+      {/* Subtle glow background */}
+      <div style={{
+        position: 'absolute', top: '-30px', right: '-30px',
+        width: '120px', height: '120px', borderRadius: '50%',
+        background: `radial-gradient(circle, ${glowColor}15 0%, transparent 70%)`,
+        pointerEvents: 'none',
+      }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', position: 'relative' }}>
+        {/* Animated Percentile Ring */}
+        <div style={{ position: 'relative', width: 60, height: 60, flexShrink: 0 }}>
+          <svg width="60" height="60" viewBox="0 0 60 60" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="30" cy="30" r="24" fill="none" stroke="#27272a" strokeWidth="4" />
+            <motion.circle
+              cx="30" cy="30" r="24" fill="none"
+              stroke={glowColor}
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              initial={{ strokeDashoffset: circumference }}
+              animate={{ strokeDashoffset: dashOffset }}
+              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
+            />
+          </svg>
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexDirection: 'column',
+          }}>
+            <span style={{ fontSize: '1rem', fontWeight: 800, color: glowColor, lineHeight: 1 }}>
+              {data.topPercentage}%
+            </span>
+          </div>
+        </div>
+
+        {/* Text */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+            <TrendingUp className="w-3.5 h-3.5" style={{ color: glowColor }} />
+            <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.06em' }}>
+              {data.semLabel?.toUpperCase()} STANDING
+            </p>
+          </div>
+          <p style={{ fontWeight: 700, fontSize: '1.15rem', color: '#ffffff', lineHeight: 1.2 }}>
+            Top {data.topPercentage}%
+          </p>
+          <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+            {data.comparisonText} · {data.standing}
+          </p>
+        </div>
+      </div>
+
+      {/* Expanded: Subject breakdown */}
+      <AnimatePresence>
+        {expanded && data.subjects && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            style={{ overflow: 'hidden', marginTop: '1rem' }}
+          >
+            <div style={{ borderTop: '1px solid #27272a', paddingTop: '0.75rem' }}>
+              <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem', letterSpacing: '0.04em' }}>
+                SUBJECT BREAKDOWN
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {data.subjects.map(sub => {
+                  const barColor = sub.percentile >= 80 ? '#22c55e' : sub.percentile >= 60 ? '#3b82f6' : sub.percentile >= 40 ? '#eab308' : '#ef4444';
+                  return (
+                    <div key={sub.courseCode}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.2rem' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
+                          {sub.courseName}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: barColor }}>
+                          Top {100 - sub.percentile}%
+                        </span>
+                      </div>
+                      <div style={{ height: 4, borderRadius: 2, background: '#27272a', overflow: 'hidden' }}>
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${sub.percentile}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }}
+                          style={{ height: '100%', borderRadius: 2, background: barColor }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.5rem', textAlign: 'center' }}>
+                Based on currently published results · Tap to collapse
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!expanded && (
+        <p style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: '0.5rem', textAlign: 'center' }}>
+          Tap to see subject breakdown
+        </p>
+      )}
     </motion.div>
   );
 }
