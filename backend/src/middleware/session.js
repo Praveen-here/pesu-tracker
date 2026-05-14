@@ -9,6 +9,7 @@ async function buildSessionMiddleware() {
     const redisClient = createClient({
       url: process.env.REDIS_URL,
       socket: { tls: true, rejectUnauthorized: false },
+      pingInterval: 1000 * 60 * 3, // Ping every 3 minutes to keep Upstash connection alive
     });
 
     redisClient.on('error', (err) => {
