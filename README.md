@@ -6,6 +6,7 @@ A clean, minimalist, and highly accurate Academic Dashboard for PES University s
 
 - **Attendance Tracker**: View real-time subject-wise attendance, "safe bunk" allowance, and precise recovery targets if you're falling behind.
 - **CGPA Tracker**: Tracks your ISA and ESA marks without making assumptions. Calculates the exact marks needed in upcoming assessments to maintain a CGPA ≥ 8.0 (for placement readiness).
+- **Rank & Percentile Insight** *(Current Semester)*: Shows where you stand academically compared to your classmates — based on the university's own published ISA mark distributions. Displays an animated overall standing card (e.g. "Top 15%") with a per-subject breakdown, so you know exactly which subjects you're excelling in and which need attention. Data is sourced directly from PESU Academy's result graphs and requires no manual input.
 - **Honest Analytics**: Unlike other trackers, PESU Tracker does not assume arbitrary ESA grades. It provides exact ranges based on your current ISA scores.
 - **Minimalist UI**: A sleek, monochrome dark mode interface optimized for speed and readability.
 - **Secure**: Credentials are used strictly for real-time fetching via PESU Academy and are never permanently stored. Sessions are securely managed via Redis.
