@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, useCallback, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
+  const handleSubmit = useCallback(async (e: FormEvent | KeyboardEvent) => {
     e.preventDefault();
     if (!srn.trim() || !password.trim()) {
       setError('Please enter both SRN and password.');
@@ -34,7 +34,17 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [srn, password, router]);
+
+  // Global Enter key listener — handles autofill case where no input is focused
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !loading) handleSubmit(e);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [handleSubmit, loading]);
+
 
   return (
     <main
@@ -107,6 +117,7 @@ export default function LoginPage() {
               placeholder="e.g. PES1PG25CA317"
               value={srn}
               onChange={(e) => setSrn(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(e as unknown as FormEvent); }}
               autoComplete="username"
               spellCheck={false}
               autoCapitalize="characters"
@@ -129,6 +140,7 @@ export default function LoginPage() {
                 placeholder="Your PESU Academy password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(e as unknown as FormEvent); }}
                 autoComplete="current-password"
                 style={{ paddingRight: '3rem' }}
               />
