@@ -156,22 +156,30 @@ function parseResultsHTML(html) {
     // Extract ALL showISAResultGraph calls from the subject block.
     // Pattern: showISAResultGraph('subjectId','marks','totalMarks','batchClassId','isaMarkMasterId')
     // PESU embeds one call per published assessment: ISA 1, ISA 2, Assignment, FINAL ISA.
-    // We extract ALL of them so we can use real PESU isaMarksMasterId values when fetching
-    // distribution graphs (instead of hardcoding 1, 2, 5).
+    // The regex allows optional whitespace since PESU's formatting can vary.
+    // PESU also duplicates HTML entries, so we deduplicate by isaMarksMasterId.
     const blockHtml = $(block).html() || '';
     let subjectId = null;
     const graphCalls = [];
-    const graphRegex = /showISAResultGraph\('(\d+)','([\d.]+)','([\d.]+)','(\d+)','(\d+)'\)/g;
+    const seenAssessmentIds = new Set();
+    const graphRegex = /showISAResultGraph\s*\(\s*'(\d+)'\s*,\s*'([\d.]+)'\s*,\s*'([\d.]+)'\s*,\s*'(\d+)'\s*,\s*'(\d+)'\s*\)/g;
     let gm;
     while ((gm = graphRegex.exec(blockHtml)) !== null) {
       if (!subjectId) subjectId = gm[1];
+      const isaMarksMasterId = parseInt(gm[5], 10);
+      // Deduplicate — PESU embeds each call twice due to its HTML duplication quirk
+      if (seenAssessmentIds.has(isaMarksMasterId)) continue;
+      seenAssessmentIds.add(isaMarksMasterId);
       graphCalls.push({
-        subjectId:       gm[1],
-        marks:           parseFloat(gm[2]),
-        totalMarks:      parseFloat(gm[3]),
-        batchClassId:    gm[4],
-        isaMarksMasterId: parseInt(gm[5], 10),
+        subjectId:        gm[1],
+        marks:            parseFloat(gm[2]),
+        totalMarks:       parseFloat(gm[3]),
+        batchClassId:     gm[4],
+        isaMarksMasterId,
       });
+    }
+    if (graphCalls.length > 0) {
+      console.log(`[Parser] ${courseCode}: found ${graphCalls.length} graph call(s) → IDs: [${graphCalls.map(g => g.isaMarksMasterId).join(', ')}]`);
     }
 
     result.subjects.push({ courseCode, courseName, credits, marks, isZeroCredit: !!isZeroCredit, subjectId, graphCalls });

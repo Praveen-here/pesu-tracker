@@ -145,6 +145,8 @@ router.get('/percentile', requireAuth, async (req, res) => {
 
       if (assessments.length === 0) continue;
 
+      console.log(`[Percentile] ${sub.courseCode}: ${assessments.length} assessment(s) via ${sub.graphCalls?.length > 0 ? 'graphCalls' : 'fallback'} — [${assessments.map(a => a.type).join(', ')}]`);
+
       // Fetch graph data for each available assessment
       const assessmentPercentiles = [];
       for (const a of assessments) {
@@ -164,6 +166,7 @@ router.get('/percentile', requireAuth, async (req, res) => {
         if (graphData && graphData.seriesArray) {
           const pct = calculatePercentile(graphData.seriesArray, a.marks);
           if (pct) {
+            console.log(`[Percentile]   ${a.type}: ${a.marks}/${a.totalMarks} → ${pct.percentile}th percentile (${pct.studentsBelow}/${pct.totalStudents} below)`);
             assessmentPercentiles.push({
               type: a.type,
               percentile: pct.percentile,
@@ -172,14 +175,25 @@ router.get('/percentile', requireAuth, async (req, res) => {
               maxMarks: a.totalMarks,
             });
           }
+        } else {
+          console.log(`[Percentile]   ${a.type}: graph fetch failed or returned no data`);
         }
       }
 
       if (assessmentPercentiles.length > 0) {
-        // Average percentile across all assessments for this subject
-        const avgPct = Math.round(
-          assessmentPercentiles.reduce((s, p) => s + p.percentile, 0) / assessmentPercentiles.length
-        );
+        // Weight each assessment percentile by its maxMarks so that larger assessments
+        // (ISA 1 = /40, ISA 2 = /40) contribute proportionally more than smaller ones
+        // (Assignment = /10). This matches how PESU itself weights these marks
+        // (Final ISA = (ISA1+ISA2)/2 + Assignment, out of 50).
+        // Without this, one bad assignment percentile cancels two good ISA scores.
+        const totalWeight = assessmentPercentiles.reduce((s, p) => s + p.maxMarks, 0);
+        const avgPct = totalWeight > 0
+          ? Math.round(assessmentPercentiles.reduce((s, p) => s + p.percentile * p.maxMarks, 0) / totalWeight)
+          : Math.round(assessmentPercentiles.reduce((s, p) => s + p.percentile, 0) / assessmentPercentiles.length);
+
+        console.log(`[Percentile] ${sub.courseCode} weighted avg: ${avgPct}th percentile (weights: ${assessmentPercentiles.map(p => `${p.type}×${p.maxMarks}`).join(', ')})`);
+
+
 
         subjectPercentiles.push({
           courseCode: sub.courseCode,
