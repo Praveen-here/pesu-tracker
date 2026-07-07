@@ -115,6 +115,7 @@ function parseResultsHTML(html) {
         score = isNaN(numScore) ? scoreText : numScore;
       }
 
+
       if (label === 'ISA 1') {
         marks.isa1 = { score: typeof score === 'number' ? score : null, max: max || 40 };
       } else if (label === 'ISA 2') {
@@ -123,9 +124,24 @@ function parseResultsHTML(html) {
         marks.assignment = { score: typeof score === 'number' ? score : null, max: max || 10 };
       } else if (label === 'FINAL ISA') {
         const finalScore = typeof score === 'number' ? score : null;
-        // PESU shows FINAL ISA = 0 as placeholder when semester is in-progress
-        // Only trust it if the semester is completed OR if it's > 0
-        marks.finalIsa = { score: (finalScore === 0 && !result.isCompleted) ? null : finalScore };
+        // PESU quirk: in in-progress semesters, PESU shows ceil(Assignment) as the
+        // "FINAL ISA" placeholder before the real Final ISA is published.
+        // The real Final ISA is always > 10 (it's a /50 score based on ISA1+ISA2+Assignment).
+        // If we see FINAL ISA <= 10 on an in-progress semester, it is the assignment
+        // ceiling — NOT a real Final ISA. Treat it as assignment if needed, and skip
+        // setting finalIsa so computeMinMarks will calculate the real value instead.
+        if (!result.isCompleted && finalScore !== null && finalScore <= 10) {
+          // Bogus placeholder — use as Assignment only if we haven't parsed one yet
+          if (!marks.assignment) {
+            marks.assignment = { score: finalScore, max: 10 };
+          }
+          // finalIsa stays unset → computeMinMarks will compute (ISA1+ISA2)/2 + assignment
+        } else {
+          // Real Final ISA (completed semester, or score > 10 meaning it's been published)
+          // PESU shows FINAL ISA = 0 as a placeholder for in-progress → treat as null
+          marks.finalIsa = { score: (finalScore === 0 && !result.isCompleted) ? null : finalScore };
+        }
+
       } else if (label === 'ESA') {
         // ESA is a grade letter (A, B, C, P, F, AP, etc.) or null
         if (typeof score === 'string' && score !== 'NA') {
@@ -134,15 +150,32 @@ function parseResultsHTML(html) {
           marks.esa = null;
         }
       }
+
     });
 
-    // Extract subjectId from graph JavaScript links
-    // Pattern: showISAResultGraph('21281','32.5','40.0','3064','1')
+    // Extract ALL showISAResultGraph calls from the subject block.
+    // Pattern: showISAResultGraph('subjectId','marks','totalMarks','batchClassId','isaMarkMasterId')
+    // PESU embeds one call per published assessment: ISA 1, ISA 2, Assignment, FINAL ISA.
+    // We extract ALL of them so we can use real PESU isaMarksMasterId values when fetching
+    // distribution graphs (instead of hardcoding 1, 2, 5).
     const blockHtml = $(block).html() || '';
-    const graphMatch = blockHtml.match(/showISAResultGraph\('(\d+)'/);
-    const subjectId = graphMatch ? graphMatch[1] : null;
+    let subjectId = null;
+    const graphCalls = [];
+    const graphRegex = /showISAResultGraph\('(\d+)','([\d.]+)','([\d.]+)','(\d+)','(\d+)'\)/g;
+    let gm;
+    while ((gm = graphRegex.exec(blockHtml)) !== null) {
+      if (!subjectId) subjectId = gm[1];
+      graphCalls.push({
+        subjectId:       gm[1],
+        marks:           parseFloat(gm[2]),
+        totalMarks:      parseFloat(gm[3]),
+        batchClassId:    gm[4],
+        isaMarksMasterId: parseInt(gm[5], 10),
+      });
+    }
 
-    result.subjects.push({ courseCode, courseName, credits, marks, isZeroCredit: !!isZeroCredit, subjectId });
+    result.subjects.push({ courseCode, courseName, credits, marks, isZeroCredit: !!isZeroCredit, subjectId, graphCalls });
+
   });
 
   return result;

@@ -20,6 +20,7 @@ interface Analysis {
   state: 'none' | 'isa1_done' | 'isa2_done' | 'complete' | 'zero_credit';
   currentIsa1: number | null;
   currentIsa2: number | null;
+  assignment: number | null;
   finalIsa: number | null;
   minEsa: number | null;
   scenarios: Scenario[] | null;
@@ -344,11 +345,12 @@ function InProgressView({ sem }: { sem: SemResult }) {
               </p>
             )}
 
-            {/* ISA 1 score done */}
+            {/* ISA 1 / ISA 2 / Assignment / Final ISA chips */}
             {a.state !== 'zero_credit' && a.currentIsa1 !== null && (
               <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
                 <Chip label="ISA 1 (done)" val={`${a.currentIsa1}/40`} highlight />
                 {a.currentIsa2 !== null && <Chip label="ISA 2 (done)" val={`${a.currentIsa2}/40`} highlight />}
+                {a.assignment !== null && <Chip label="Assignment" val={`${a.assignment}/10`} highlight />}
                 {a.finalIsa !== null && <Chip label="Final ISA" val={`${a.finalIsa.toFixed(1)}/50`} />}
               </div>
             )}

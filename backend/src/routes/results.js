@@ -109,31 +109,38 @@ router.get('/percentile', requireAuth, async (req, res) => {
 
       const credits = sub.credits?.total || 4;
 
-      // Collect all available assessments for this subject
-      const assessments = [];
-      if (sub.marks.isa1?.score != null) {
-        assessments.push({
-          type: 'ISA 1',
-          marks: sub.marks.isa1.score,
-          totalMarks: sub.marks.isa1.max || 40,
-          isaMarksMasterId: 1,
-        });
-      }
-      if (sub.marks.isa2?.score != null) {
-        assessments.push({
-          type: 'ISA 2',
-          marks: sub.marks.isa2.score,
-          totalMarks: sub.marks.isa2.max || 40,
-          isaMarksMasterId: 2,
-        });
-      }
-      if (sub.marks.assignment?.score != null) {
-        assessments.push({
-          type: 'Assignment',
-          marks: sub.marks.assignment.score,
-          totalMarks: sub.marks.assignment.max || 10,
-          isaMarksMasterId: 5,
-        });
+      // Build the assessments list for graph fetching.
+      // Prefer graphCalls extracted from PESU's HTML — they contain the REAL
+      // isaMarksMasterId for every published assessment (ISA 1, ISA 2, Assignment,
+      // FINAL ISA when available), so the graph API always gets the correct params.
+      // Fall back to hardcoded IDs only when graphCalls aren't available.
+      let assessments = [];
+
+      if (sub.graphCalls && sub.graphCalls.length > 0) {
+        // Use all graph calls from PESU's HTML directly.
+        // Each call has: subjectId, marks, totalMarks, batchClassId, isaMarksMasterId.
+        // Label is derived from the ID for display only — it doesn't affect the API call.
+        assessments = sub.graphCalls.map(gc => ({
+          type: gc.isaMarksMasterId === 1 ? 'ISA 1'
+              : gc.isaMarksMasterId === 2 ? 'ISA 2'
+              : gc.isaMarksMasterId === 5 ? 'Assignment'
+              : gc.isaMarksMasterId === 3 ? 'Final ISA'
+              : `Assessment ${gc.isaMarksMasterId}`,
+          marks:           gc.marks,
+          totalMarks:      gc.totalMarks,
+          isaMarksMasterId: gc.isaMarksMasterId,
+          batchClassId:    gc.batchClassId, // use the batchClassId from the HTML
+        }));
+      } else {
+        // Fallback: build from parsed marks with hardcoded IDs
+        if (sub.marks.isa1?.score != null)
+          assessments.push({ type: 'ISA 1',   marks: sub.marks.isa1.score,       totalMarks: sub.marks.isa1.max || 40,       isaMarksMasterId: 1 });
+        if (sub.marks.isa2?.score != null)
+          assessments.push({ type: 'ISA 2',   marks: sub.marks.isa2.score,       totalMarks: sub.marks.isa2.max || 40,       isaMarksMasterId: 2 });
+        if (sub.marks.assignment?.score != null)
+          assessments.push({ type: 'Assignment', marks: sub.marks.assignment.score, totalMarks: sub.marks.assignment.max || 10, isaMarksMasterId: 5 });
+        if (sub.marks.finalIsa?.score != null)
+          assessments.push({ type: 'Final ISA', marks: sub.marks.finalIsa.score,   totalMarks: 50,                             isaMarksMasterId: 3 });
       }
 
       if (assessments.length === 0) continue;
@@ -146,10 +153,10 @@ router.get('/percentile', requireAuth, async (req, res) => {
           req.session.csrf,
           req.session.finalUrl,
           {
-            subjectId: sub.subjectId,
-            marks: a.marks,
-            totalMarks: a.totalMarks,
-            batchClassId: semId,
+            subjectId:        sub.subjectId,
+            marks:            a.marks,
+            totalMarks:       a.totalMarks,
+            batchClassId:     a.batchClassId || semId, // prefer HTML-extracted ID
             isaMarksMasterId: a.isaMarksMasterId,
           }
         );
