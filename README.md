@@ -61,7 +61,7 @@ This application is split into two parts:
 
 ## Live link
 
-pesu-tracker.vercel.app
+(https://pesu-tracker.vercel.app)
 
 ## Disclaimer
 Not affiliated with or endorsed by PES University. This is an independent student project built to improve the academic tracking experience.
