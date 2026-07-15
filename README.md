@@ -59,5 +59,9 @@ This application is split into two parts:
 - **Frontend** is optimized for deployment on [Vercel](https://vercel.com/). Ensure you set the `NEXT_PUBLIC_BACKEND_URL` environment variable.
 - **Backend** is designed to be hosted on platforms like [Render](https://render.com/) or Railway. Ensure you set the `FRONTEND_URL` and `REDIS_URL` environment variables.
 
+## Live link
+
+pesu-tracker.vercel.app
+
 ## Disclaimer
 Not affiliated with or endorsed by PES University. This is an independent student project built to improve the academic tracking experience.
