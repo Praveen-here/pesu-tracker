@@ -124,12 +124,15 @@ async function loginToPESU(client, srn, password, formFields) {
 }
 
 /**
- * Fetch semester list.
- * The page JS calls getCombobox('/Academy/a/studentProfilePESU/getStudentSemestersPESU', ...)
- * which is a simple GET that returns <option> HTML.
+ * Fetch semester list (for attendance — includes the current in-progress semester
+ * even before any ISA/ESA is published for it, unlike the results-semester list).
+ * PESU's own attendance-page JS calls getCombobox('/Academy/s/studentProfile/getStudentSemestersPESU', ...)
+ * (a GET returning <option> HTML) — its markup even has the old /a/studentProfilePESU/
+ * path commented out, confirming PESU migrated this endpoint. The old /a/ path 403s
+ * with "Access denied for student role" for PG accounts; this one works for all roles.
  */
 async function getLatestSemesterId(client, csrf, finalUrl) {
-  const semesterUrl = `https://www.pesuacademy.com/Academy/a/studentProfilePESU/getStudentSemestersPESU`;
+  const semesterUrl = `https://www.pesuacademy.com/Academy/s/studentProfile/getStudentSemestersPESU`;
   const res = await client.get(
     semesterUrl,
     {
@@ -229,9 +232,12 @@ async function fetchAllResults(serializedJar, csrf, finalUrl) {
     'X-CSRF-TOKEN': csrf,
   };
 
-  // Get semester list for results
+  // Get semester list for results.
+  // NOTE: the old /a/studentProfilePESU/ path 403s ("Access denied for student role")
+  // for PG accounts. /s/studentProfile/ is what PESU's own Results page JS calls and
+  // works for all roles.
   const semRes = await client.get(
-    `${PESU_BASE}/a/studentProfilePESU/getEsaAndIsaResultSemBySRN?_=${Date.now()}`,
+    `${PESU_BASE}/s/studentProfile/getEsaAndIsaResultSemBySRN`,
     { headers: { Referer: finalUrl || `${PESU_BASE}/s/studentProfilePESU`, 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': csrf }, validateStatus: (s) => s < 500 }
   );
   const $sems = cheerio.load(`<select>${semRes.data}</select>`);
